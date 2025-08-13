@@ -8,8 +8,23 @@ on:
 jobs:
   build:
     runs-on: windows-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Show repo tree (sanity check)
+        shell: bash
+        run: |
+          echo "PWD=$(pwd)"
+          ls -la
+          echo "----- src"
+          ls -la src || true
+
+      - name: Verify entry file exists
+        shell: bash
+        run: |
+          test -f "src/app_main.py" || (echo "::error ::src/app_main.py 不存在，请把你的主脚本放到 src/app_main.py" && exit 1)
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -17,21 +32,35 @@ jobs:
           python-version: '3.11'
 
       - name: Install deps
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
+          python -m pip install --upgrade pip wheel setuptools
           pip install -r requirements.txt pyinstaller
 
       - name: Install poppler (for pdf2image)
         shell: powershell
         run: |
           choco install -y poppler
-          echo "POPLER=C:\ProgramData\chocolatey\lib\poppler\tools" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          $pop = "C:\ProgramData\chocolatey\lib\poppler\tools"
+          if (!(Test-Path $pop)) { Write-Error "Poppler tools 未找到: $pop"; exit 1 }
+          "POPLER=$pop" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          Write-Host "Poppler tools at: $pop"
+          Get-ChildItem $pop | Select-Object -First 10
 
       - name: Build (one-folder, most stable)
+        shell: bash
         run: |
-          pyinstaller -n MyApp --noconsole --clean src/app_main.py
-          # 把 poppler 可执行文件放进产物目录，确保离线可用
-          xcopy "%POPLER%\*" "dist\MyApp\" /Y
+          # 用模块调用更稳（避免 PATH 问题）
+          python -m PyInstaller -n MyApp --noconsole --clean src/app_main.py
+        # 如需调试，把上面一行换成：python -m PyInstaller -n MyApp --clean src/app_main.py
+
+      - name: Bundle poppler into output
+        shell: powershell
+        run: |
+          if (!(Test-Path "dist\MyApp")) { Write-Error "PyInstaller 产物 dist\MyApp 不存在"; exit 1 }
+          Copy-Item -Path "$env:POPLER\*" -Destination "dist\MyApp" -Recurse -Force
+          Write-Host "Copied poppler into dist\\MyApp"
+          Get-ChildItem "dist\MyApp" | Select-Object -First 20
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
