@@ -1,0 +1,6 @@
+pillow
+pandas
+pdf2image
+reportlab
+PyPDF2
+numpy
