@@ -7,7 +7,9 @@ import io
 import tempfile
 from pathlib import Path
 import sys
-from pdf2image import convert_from_path, convert_from_bytes
+from pdf2image import convert_from_path
+...
+images = convert_from_path(pdf_path)
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.colors import Color
@@ -27,11 +29,39 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 import time
+# ---- 放在文件顶部靠前位置（import 之后也可，但要在使用 pdf2image 前）
+import os, sys
 
+def ensure_poppler_path():
+    """
+    在常见位置查找 pdftoppm.exe，并把该目录加入 PATH。
+    返回找到的目录；找不到返回 None。
+    """
+    base_dir = getattr(sys, "_MEIPASS", None)  # PyInstaller 运行时临时目录
+    candidates = []
+
+    # 运行目录（dist\MyApp\ 下）
+    candidates.append(os.getcwd())
+    # PyInstaller 解包目录
+    if base_dir:
+        candidates.append(base_dir)
+    # 常见 sidecar 子目录
+    candidates.append(os.path.join(os.getcwd(), "poppler"))
+    # Chocolatey 默认安装路径（CI/本机）
+    candidates.append(r"C:\ProgramData\chocolatey\lib\poppler\tools")
+
+    for c in candidates:
+        exe = os.path.join(c, "pdftoppm.exe")
+        if os.path.exists(exe):
+            os.environ["PATH"] = c + os.pathsep + os.environ.get("PATH", "")
+            return c
+    return None
+
+POPLER_DIR = ensure_poppler_path()
 
 class ModernGlassUI:
     """现代化磨砂玻璃UI样式管理器"""
-    
+
     def __init__(self):
         self.colors = {
             'primary': '#2C3E50',
@@ -49,33 +79,33 @@ class ModernGlassUI:
             'text_primary': '#2C3E50',
             'text_secondary': '#7F8C8D'
         }
-        
+
         self.fonts = {
             'title': ('Segoe UI', 12, 'bold'),
             'heading': ('Segoe UI', 10, 'bold'),
             'normal': ('Segoe UI', 9),
             'small': ('Segoe UI', 8)
         }
-        
+
         self.setup_styles()
-    
+
     def setup_styles(self):
         """设置现代化样式"""
         style = ttk.Style()
-        
+
         # 配置主题颜色
         bg_color = '#F8F9FA'
         fg_color = self.colors['text_primary']
-        
+
         # 设置主窗口样式
         style.configure('TFrame', background=bg_color)
-        style.configure('TLabelframe', background=bg_color, 
+        style.configure('TLabelframe', background=bg_color,
                        bordercolor=self.colors['glass_border'], relief='solid', borderwidth=1)
-        style.configure('TLabelframe.Label', background=bg_color, 
+        style.configure('TLabelframe.Label', background=bg_color,
                        foreground=self.colors['text_primary'], font=self.fonts['heading'])
-        
+
         # 按钮样式 - 现代化设计
-        style.configure('TButton', 
+        style.configure('TButton',
                        background=self.colors['secondary'],
                        foreground=self.colors['text_primary'],
                        borderwidth=0,
@@ -85,17 +115,17 @@ class ModernGlassUI:
         style.map('TButton',
                  background=[('active', '#2980B9'), ('pressed', '#21618C')],
                  foreground=[('active', self.colors['text_primary']), ('pressed', self.colors['text_primary']), ('disabled', 'gray')])
-        
+
         # 标签样式
-        style.configure('TLabel', background=bg_color, 
+        style.configure('TLabel', background=bg_color,
                        foreground=self.colors['text_primary'], font=self.fonts['normal'])
         style.configure('Title.TLabel', background=bg_color,
                        foreground=self.colors['primary'], font=self.fonts['title'])
         style.configure('Heading.TLabel', background=bg_color,
                        foreground=self.colors['text_primary'], font=self.fonts['heading'])
-        
+
         # 输入框样式
-        style.configure('TEntry', 
+        style.configure('TEntry',
                        fieldbackground='white',
                        bordercolor=self.colors['glass_border'],
                        borderwidth=1,
@@ -103,9 +133,9 @@ class ModernGlassUI:
                        font=self.fonts['normal'])
         style.map('TEntry',
                  bordercolor=[('focus', self.colors['secondary'])])
-        
+
         # 下拉框样式
-        style.configure('TCombobox', 
+        style.configure('TCombobox',
                        fieldbackground='white',
                        bordercolor=self.colors['glass_border'],
                        borderwidth=1,
@@ -113,37 +143,37 @@ class ModernGlassUI:
                        font=self.fonts['normal'])
         style.map('TCombobox',
                  bordercolor=[('focus', self.colors['secondary'])])
-        
+
         # 复选框样式
-        style.configure('TCheckbutton', 
+        style.configure('TCheckbutton',
                        background=bg_color,
                        foreground=self.colors['text_primary'],
                        font=self.fonts['normal'])
-        
+
         # 单选框样式
-        style.configure('TRadiobutton', 
+        style.configure('TRadiobutton',
                        background=bg_color,
                        foreground=self.colors['text_primary'],
                        font=self.fonts['normal'])
-        
+
         # 滚动条样式
-        style.configure('TScrollbar', 
+        style.configure('TScrollbar',
                        background=bg_color,
                        bordercolor=self.colors['glass_border'],
                        troughcolor=self.colors['glass_border'],
                        width=8)
         style.map('TScrollbar',
                  background=[('active', self.colors['secondary'])])
-        
+
         # 进度条样式
-        style.configure('TProgressbar', 
+        style.configure('TProgressbar',
                        background=self.colors['secondary'],
                        troughcolor=self.colors['glass_border'],
                        borderwidth=0)
-        
+
         # 选项卡样式
         style.configure('TNotebook', background=bg_color, borderwidth=0)
-        style.configure('TNotebook.Tab', 
+        style.configure('TNotebook.Tab',
                        background='#F0F0F0',
                        foreground='#000000',
                        padding=(16, 8),
@@ -152,7 +182,7 @@ class ModernGlassUI:
                        font=self.fonts['normal'])
         style.map('TNotebook.Tab',
                  background=[('selected', self.colors['secondary'])])
-        
+
         # 分隔线样式
         style.configure('TSeparator', background=self.colors['glass_border'])
 
@@ -165,10 +195,10 @@ class PDFWatermarkTool:
         self.master = master
         master.title("PDF批量水印工具+邮件自动发送系统")
         master.geometry("1280x800")
-        
+
         # 初始化UI样式管理器
         self.ui = ModernGlassUI()
-        
+
         # 设置现代化主窗口背景
         self.configure_window_background()
 
@@ -231,18 +261,18 @@ class PDFWatermarkTool:
 
         # 加载邮件设置
         self.load_email_settings()
-    
+
     def configure_window_background(self):
         """配置现代化窗口背景"""
         self.master.configure(bg='#F8F9FA')
-        
+
         # 创建渐变背景效果
         bg_frame = tk.Frame(self.master, bg='#F8F9FA')
         bg_frame.place(relwidth=1, relheight=1)
-        
+
         # 添加阴影效果和现代感
         self.master.configure(highlightbackground='#E9ECEF', highlightthickness=1)
-    
+
     def setup_ui_styles(self):
         """设置UI样式"""
         # 现代化样式已在ModernGlassUI中配置
@@ -409,16 +439,16 @@ class PDFWatermarkTool:
         # 底部状态栏 - 现代化设计
         status_container = tk.Frame(self.master, bg='#F8F9FA', height=40)
         status_container.pack(side=tk.BOTTOM, fill=tk.X, padx=15, pady=(0, 15))
-        
-        self.status_bar = ttk.Label(status_container, text="就绪", relief=tk.FLAT, 
+
+        self.status_bar = ttk.Label(status_container, text="就绪", relief=tk.FLAT,
                                    style='Heading.TLabel')
         self.status_bar.pack(side=tk.LEFT, padx=10, pady=10)
 
         # 进度条 - 现代化设计
         progress_container = tk.Frame(self.master, bg='#F8F9FA')
         progress_container.pack(side=tk.BOTTOM, fill=tk.X, padx=15, pady=(0, 10))
-        
-        self.progress = ttk.Progressbar(progress_container, orient=tk.HORIZONTAL, 
+
+        self.progress = ttk.Progressbar(progress_container, orient=tk.HORIZONTAL,
                                       length=100, mode='determinate', style='TProgressbar')
         self.progress.pack(side=tk.BOTTOM, fill=tk.X)
 
@@ -443,7 +473,7 @@ class PDFWatermarkTool:
         # 左侧控制区域 - 现代化设计
         control_group = ttk.LabelFrame(left_frame, text="PDF文件控制", padding="15")
         control_group.pack(fill=tk.X, pady=(0, 15))
-        
+
         ttk.Label(control_group, text="选择PDF文件:").grid(row=0, column=0, sticky="w", pady=8)
         ttk.Button(control_group, text="浏览...", command=self.load_pdf).grid(row=0, column=1, sticky="e", pady=8)
 
@@ -558,7 +588,7 @@ class PDFWatermarkTool:
 
 导入后，公司列表将显示：
 • 公司A (admin@companyA.com; sales@companyA.com)
-• 公司B (contact@companyB.com)  
+• 公司B (contact@companyB.com)
 • 公司C (info@companyC.com; support@companyC.com... 等3个)
 
 系统将为每个公司生成相同的水印PDF，并发送给该公司的所有邮箱地址。"""
@@ -579,7 +609,7 @@ class PDFWatermarkTool:
             if hasattr(self, '_scrollregion_timer'):
                 self.master.after_cancel(self._scrollregion_timer)
             self._scrollregion_timer = self.master.after(100, lambda: canvas.configure(scrollregion=canvas.bbox("all")))
-        
+
         scrollable_frame.bind("<Configure>", update_scrollregion)
 
         canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
@@ -847,7 +877,7 @@ class PDFWatermarkTool:
                                bg='white', relief=tk.FLAT, borderwidth=1, font=('Consolas', 9))
         self.log_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
         self.log_text.config(state=tk.DISABLED)
-        
+
         # 优化日志文本框性能
         self.log_text.config(spacing1=2, spacing2=2, spacing3=2)  # 减少行间距
 
@@ -1167,36 +1197,36 @@ Gmail邮箱优化：
         """验证邮箱地址格式 - 增强版RFC 5322合规检查"""
         if not email or not isinstance(email, str):
             return False
-        
+
         email = email.strip()
-        
+
         # 基本长度检查
         if len(email) > 254:  # RFC 5322规定最大长度
             return False
-        
+
         # 更严格的正则表达式，符合RFC 5322标准
         import re
         pattern = r'^[a-zA-Z0-9!#$%&\'*+/=?^_`{|}~-]+(?:\.[a-zA-Z0-9!#$%&\'*+/=?^_`{|}~-]+)*@(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z0-9](?:[a-zA-Z0-9-]*[a-zA-Z0-9])?$'
-        
+
         if not re.match(pattern, email):
             return False
-        
+
         # 额外检查：确保域名部分有效
         local_part, domain_part = email.split('@', 1)
-        
+
         # 检查本地部分长度
         if len(local_part) > 64:  # RFC 5322规定本地部分最大长度
             return False
-        
+
         # 检查域名部分
         if len(domain_part) > 253 or '.' not in domain_part:
             return False
-        
+
         # 检查域名各部分
         domain_parts = domain_part.split('.')
         if any(len(part) == 0 or len(part) > 63 for part in domain_parts):
             return False
-        
+
         return True
 
     def update_email_status(self):
@@ -1227,11 +1257,11 @@ Gmail邮箱优化：
             # 设置基本邮件头 - 确保RFC 5322合规
             sender_name = self.sender_name.get().strip()
             sender_email = self.smtp_username.get().strip()
-            
+
             # 验证邮箱地址格式
             if not self.is_valid_email(sender_email):
                 raise Exception(f"发件人邮箱地址格式无效: {sender_email}")
-            
+
             # 安全地设置From头部，处理特殊字符
             try:
                 # 尝试直接设置（ASCII字符）
@@ -1243,7 +1273,7 @@ Gmail邮箱优化：
                 from email.header import Header
                 encoded_name = Header(sender_name, 'utf-8').encode()
                 msg['From'] = f"{encoded_name} <{sender_email}>"
-            
+
             msg['To'] = email_address
 
             # 处理邮件主题，确保Gmail能正确显示
@@ -1321,12 +1351,12 @@ Gmail邮箱优化：
         if not self.smtp_username.get() or not self.smtp_password.get():
             messagebox.showerror("错误", "请先填写邮箱账号和密码")
             return
-        
+
         # 验证邮箱地址格式
         if not self.is_valid_email(self.smtp_username.get()):
             messagebox.showerror("错误", f"发件人邮箱地址格式无效: {self.smtp_username.get()}")
             return
-        
+
         # 验证发件人姓名
         sender_name = self.sender_name.get().strip()
         if not sender_name:
@@ -1353,27 +1383,27 @@ Gmail邮箱优化：
 
     def save_email_settings(self):
         """保存邮件设置"""
-        
+
         # 验证邮箱地址格式
         if not self.is_valid_email(self.smtp_username.get()):
             messagebox.showerror("错误", f"发件人邮箱地址格式无效: {self.smtp_username.get()}")
             return
-        
+
         # 验证发件人姓名
         sender_name = self.sender_name.get().strip()
         if not sender_name:
             messagebox.showerror("错误", "发件人姓名不能为空")
             return
-        
+
         # 验证SMTP服务器设置
         if not self.smtp_server.get().strip():
             messagebox.showerror("错误", "SMTP服务器地址不能为空")
             return
-        
+
         if self.smtp_port.get() not in [465, 587, 25]:
             messagebox.showerror("错误", "SMTP端口必须是 465(SSL)、587(TLS) 或 25")
             return
-        
+
         settings = {
             "smtp_server": self.smtp_server.get(),
             "smtp_port": self.smtp_port.get(),
@@ -1447,7 +1477,7 @@ Gmail邮箱优化：
         template_window.geometry("400x300")
         template_window.transient(self.master)
         template_window.grab_set()
-        
+
         # 应用现代化样式
         template_window.configure(bg='#F8F9FA')
 
@@ -2055,7 +2085,7 @@ Gmail邮箱优化：
                         if isinstance(child, ttk.Button) and "批量处理" in str(child.cget('text')):
                             self.start_button = child
                             break
-        
+
         if not self.pdf_path:
             messagebox.showinfo("提示", "请先选择PDF文件")
             return
@@ -2095,7 +2125,7 @@ Gmail邮箱优化：
         # 开始处理前清空进度条和日志
         self.progress['value'] = 0
         self.status_bar.config(text="正在处理...")
-        
+
         # 禁用开始按钮，防止重复点击
         if hasattr(self, 'start_button'):
             self.start_button.config(state='disabled')
@@ -2557,12 +2587,12 @@ Gmail邮箱优化：
         # 优化日志性能：限制日志长度，避免内存溢出
         self.log_text.config(state=tk.NORMAL)
         self.log_text.insert(tk.END, message + "\n")
-        
+
         # 限制日志长度为1000行，超过则删除最早的行
         line_count = int(self.log_text.index('end-1c').split('.')[0])
         if line_count > 1000:
             self.log_text.delete('1.0', '2.0')
-        
+
         self.log_text.see(tk.END)
         self.log_text.config(state=tk.DISABLED)
 
