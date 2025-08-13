@@ -9,7 +9,7 @@ from pathlib import Path
 import sys
 from pdf2image import convert_from_path
 ...
-images = convert_from_path(pdf_path)
+# removed erroneous stray call: convert_from_path(pdf_path, poppler_path=POPLER_DIR)
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.colors import Color
@@ -1527,7 +1527,7 @@ Gmail邮箱优化：
             quality = int(self.conversion_quality.get())
 
             # 将PDF页面转换为图像，使用与最终输出相同的质量设置
-            images = convert_from_path(self.pdf_path, first_page=page_num, last_page=page_num, dpi=quality)
+            images = convert_from_path(self.pdf_path, first_page=page_num, last_page=page_num, dpi=quality, poppler_path=POPLER_DIR)
             if images:
                 image = images[0]
                 self.show_preview(image)
@@ -2305,7 +2305,7 @@ Gmail邮箱优化：
             int_pattern_density = int(pattern_density)  # 保证是整数
 
             # 将PDF转换为图像
-            images = convert_from_path(input_path, dpi=int_quality)
+            images = convert_from_path(input_path, dpi=int_quality, poppler_path=POPLER_DIR)
 
             # 添加水印到每个图像
             watermarked_images = []
