@@ -27,7 +27,28 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 import time
+import sys
+import os
 
+# 确保当前目录在 PATH 中（用于查找 Poppler）
+if getattr(sys, 'frozen', False):
+    # 如果是打包后的应用
+    application_path = os.path.dirname(sys.executable)
+    os.environ['PATH'] = application_path + os.pathsep + os.environ.get('PATH', '')
+    
+    # 添加调试信息
+    print(f"Running from: {application_path}")
+    print(f"PATH: {os.environ['PATH']}")
+
+# 检查必要的依赖
+try:
+    import openpyxl
+    print(f"openpyxl version: {openpyxl.__version__}")
+except ImportError as e:
+    print(f"Error importing openpyxl: {e}")
+    import tkinter.messagebox as messagebox
+    messagebox.showerror("依赖错误", "无法加载 openpyxl 模块。请重新安装程序。")
+    sys.exit(1)
 
 class ModernGlassUI:
     """现代化磨砂玻璃UI样式管理器"""
