@@ -1,5 +1,6 @@
 pillow
 pandas
+openpyxl  # 添加这一行
 pdf2image
 reportlab
 PyPDF2
