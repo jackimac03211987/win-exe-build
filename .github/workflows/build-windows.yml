@@ -13,19 +13,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Show repo tree (sanity check)
-        shell: bash
-        run: |
-          echo "PWD=$(pwd)"
-          ls -la
-          echo "----- src"
-          ls -la src || true
-
-      - name: Verify entry file exists
-        shell: bash
-        run: |
-          test -f "src/app_main.py" || (echo "::error ::src/app_main.py 不存在，请把你的主脚本放到 src/app_main.py" && exit 1)
-
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -37,33 +24,45 @@ jobs:
           python -m pip install --upgrade pip wheel setuptools
           pip install -r requirements.txt pyinstaller
 
-      - name: Install poppler (for pdf2image)
+      - name: Download Poppler Windows binaries
         shell: powershell
         run: |
-          choco install -y poppler
-          $pop = "C:\ProgramData\chocolatey\lib\poppler\tools"
-          if (!(Test-Path $pop)) { Write-Error "Poppler tools 未找到: $pop"; exit 1 }
-          "POPLER=$pop" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-          Write-Host "Poppler tools at: $pop"
-          Get-ChildItem $pop | Select-Object -First 10
+          # 下载预编译的 Poppler Windows 二进制文件
+          Invoke-WebRequest -Uri "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.08.0-0/Release-24.08.0-0.zip" -OutFile "poppler.zip"
+          Expand-Archive -Path "poppler.zip" -DestinationPath "poppler_temp"
+          New-Item -ItemType Directory -Force -Path "poppler"
+          Copy-Item "poppler_temp/poppler-24.08.0/Library/bin/*" -Destination "poppler/" -Recurse
+          Remove-Item "poppler.zip"
+          Remove-Item "poppler_temp" -Recurse
 
-      - name: Build (one-folder, most stable)
+      - name: Build with PyInstaller
         shell: bash
         run: |
-          # 用模块调用更稳（避免 PATH 问题）
-          python -m PyInstaller -n MyApp --noconsole --clean src/app_main.py
-        # 如需调试，把上面一行换成：python -m PyInstaller -n MyApp --clean src/app_main.py
+          python -m PyInstaller \
+            --name="PDFWatermark" \
+            --windowed \
+            --onedir \
+            --add-data="poppler;poppler" \
+            --hidden-import="openpyxl" \
+            --hidden-import="pandas.io.excel._openpyxl" \
+            --clean \
+            src/app_main.py
 
-      - name: Bundle poppler into output
+      - name: Test executable
         shell: powershell
         run: |
-          if (!(Test-Path "dist\MyApp")) { Write-Error "PyInstaller 产物 dist\MyApp 不存在"; exit 1 }
-          Copy-Item -Path "$env:POPLER\*" -Destination "dist\MyApp" -Recurse -Force
-          Write-Host "Copied poppler into dist\\MyApp"
-          Get-ChildItem "dist\MyApp" | Select-Object -First 20
+          # 检查生成的文件
+          Get-ChildItem "dist/PDFWatermark" -Recurse | Select-Object -First 20
+          
+          # 检查 Poppler 文件
+          if (Test-Path "dist/PDFWatermark/poppler/pdftoppm.exe") {
+            Write-Host "✓ Poppler tools found in output"
+          } else {
+            Write-Host "✗ Poppler tools missing!"
+          }
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: MyApp-windows
-          path: dist/MyApp/**
+          name: PDFWatermark-Windows
+          path: dist/PDFWatermark/**
