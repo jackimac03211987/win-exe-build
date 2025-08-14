@@ -51,7 +51,7 @@ jobs:
           Remove-Item "poppler.zip" -Force
           Remove-Item "poppler_temp" -Recurse -Force
 
-      - name: Build with PyInstaller (using spec file)
+      - name: Build with PyInstaller using spec file
         shell: bash
         run: |
           # 如果存在 spec 文件，使用它
@@ -111,36 +111,37 @@ jobs:
           }
 
       - name: Create test files
-        shell: powershell
+        shell: bash
         run: |
-          # 创建测试 Excel 文件
-          @"
-import pandas as pd
-import os
+          cat > create_test_files.py << 'EOF'
+          import pandas as pd
+          import os
+          
+          # 创建测试数据
+          data = {
+              'Company': ['Test Company 1', 'Test Company 2'],
+              'Email': ['test1@example.com', 'test2@example.com']
+          }
+          df = pd.DataFrame(data)
+          
+          # 保存为 Excel
+          df.to_excel('test_data.xlsx', index=False)
+          print('Created test_data.xlsx')
+          
+          # 创建简单的 PDF（用 reportlab）
+          from reportlab.pdfgen import canvas
+          from reportlab.lib.pagesizes import letter
+          
+          c = canvas.Canvas("test.pdf", pagesize=letter)
+          c.drawString(100, 750, "Test PDF Document")
+          c.drawString(100, 700, "This is a test page.")
+          c.save()
+          print('Created test.pdf')
+          EOF
+          
+          python create_test_files.py
 
-# 创建测试数据
-data = {
-    'Company': ['Test Company 1', 'Test Company 2'],
-    'Email': ['test1@example.com', 'test2@example.com']
-}
-df = pd.DataFrame(data)
-
-# 保存为 Excel
-df.to_excel('test_data.xlsx', index=False)
-print('Created test_data.xlsx')
-
-# 创建简单的 PDF（用 reportlab）
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-
-c = canvas.Canvas("test.pdf", pagesize=letter)
-c.drawString(100, 750, "Test PDF Document")
-c.drawString(100, 700, "This is a test page.")
-c.save()
-print('Created test.pdf')
-"@ | python
-
-      - name: Test executable (basic)
+      - name: Test executable basic
         shell: cmd
         run: |
           echo Testing executable launch...
