@@ -22,47 +22,149 @@ jobs:
         shell: bash
         run: |
           python -m pip install --upgrade pip wheel setuptools
-          pip install -r requirements.txt pyinstaller
+          # 确保安装所有必要的包
+          pip install pillow pandas openpyxl pdf2image reportlab PyPDF2 numpy pyinstaller
+          # 验证 openpyxl 安装
+          python -c "import openpyxl; print(f'openpyxl version: {openpyxl.__version__}')"
 
       - name: Download Poppler Windows binaries
         shell: powershell
         run: |
           # 下载预编译的 Poppler Windows 二进制文件
+          Write-Host "Downloading Poppler..."
           Invoke-WebRequest -Uri "https://github.com/oschwartz10612/poppler-windows/releases/download/v24.08.0-0/Release-24.08.0-0.zip" -OutFile "poppler.zip"
-          Expand-Archive -Path "poppler.zip" -DestinationPath "poppler_temp"
+          
+          Write-Host "Extracting Poppler..."
+          Expand-Archive -Path "poppler.zip" -DestinationPath "poppler_temp" -Force
+          
+          # 创建 poppler 目录
           New-Item -ItemType Directory -Force -Path "poppler"
-          Copy-Item "poppler_temp/poppler-24.08.0/Library/bin/*" -Destination "poppler/" -Recurse
-          Remove-Item "poppler.zip"
-          Remove-Item "poppler_temp" -Recurse
+          
+          # 复制所有二进制文件
+          Copy-Item "poppler_temp/poppler-24.08.0/Library/bin/*" -Destination "poppler/" -Recurse -Force
+          
+          # 验证 Poppler 文件
+          Write-Host "Poppler files in directory:"
+          Get-ChildItem "poppler" | Select-Object Name
+          
+          # 清理
+          Remove-Item "poppler.zip" -Force
+          Remove-Item "poppler_temp" -Recurse -Force
 
-      - name: Build with PyInstaller
+      - name: Build with PyInstaller (using spec file)
         shell: bash
         run: |
-          python -m PyInstaller \
-            --name="PDFWatermark" \
-            --windowed \
-            --onedir \
-            --add-data="poppler;poppler" \
-            --hidden-import="openpyxl" \
-            --hidden-import="pandas.io.excel._openpyxl" \
-            --clean \
-            src/app_main.py
+          # 如果存在 spec 文件，使用它
+          if [ -f "PDFWatermark.spec" ]; then
+            echo "Using spec file..."
+            python -m PyInstaller PDFWatermark.spec --clean
+          else
+            echo "Using command line options..."
+            python -m PyInstaller \
+              --name="PDFWatermark" \
+              --windowed \
+              --onedir \
+              --add-binary="poppler/*.exe;." \
+              --add-binary="poppler/*.dll;." \
+              --hidden-import="openpyxl" \
+              --hidden-import="openpyxl.cell._writer" \
+              --hidden-import="pandas.io.excel._openpyxl" \
+              --hidden-import="pdf2image" \
+              --hidden-import="pdf2image.pdf2image" \
+              --collect-all="openpyxl" \
+              --collect-all="pandas" \
+              --clean \
+              src/app_main.py
+          fi
 
-      - name: Test executable
+      - name: Test executable dependencies
         shell: powershell
         run: |
-          # 检查生成的文件
-          Get-ChildItem "dist/PDFWatermark" -Recurse | Select-Object -First 20
+          Write-Host "=== Checking build output ==="
           
-          # 检查 Poppler 文件
-          if (Test-Path "dist/PDFWatermark/poppler/pdftoppm.exe") {
-            Write-Host "✓ Poppler tools found in output"
-          } else {
-            Write-Host "✗ Poppler tools missing!"
+          # 检查生成的文件
+          Write-Host "`nFiles in dist/PDFWatermark:"
+          Get-ChildItem "dist/PDFWatermark" | Select-Object Name, Length
+          
+          # 检查 Poppler 工具
+          Write-Host "`n=== Checking Poppler tools ==="
+          $popplerFiles = @("pdftoppm.exe", "pdfinfo.exe", "pdftocairo.exe")
+          foreach ($file in $popplerFiles) {
+            $path = "dist/PDFWatermark/$file"
+            if (Test-Path $path) {
+              Write-Host "✓ Found: $file"
+            } else {
+              Write-Host "✗ Missing: $file"
+            }
           }
+          
+          # 检查 Python 包
+          Write-Host "`n=== Checking Python packages ==="
+          $packages = @("openpyxl", "pandas", "pdf2image")
+          foreach ($pkg in $packages) {
+            $pkgPath = Get-ChildItem -Path "dist/PDFWatermark" -Filter "*$pkg*" -Recurse -ErrorAction SilentlyContinue
+            if ($pkgPath) {
+              Write-Host "✓ Found package files for: $pkg"
+            } else {
+              Write-Host "⚠ Warning: No files found for: $pkg"
+            }
+          }
+
+      - name: Create test files
+        shell: powershell
+        run: |
+          # 创建测试 Excel 文件
+          @"
+import pandas as pd
+import os
+
+# 创建测试数据
+data = {
+    'Company': ['Test Company 1', 'Test Company 2'],
+    'Email': ['test1@example.com', 'test2@example.com']
+}
+df = pd.DataFrame(data)
+
+# 保存为 Excel
+df.to_excel('test_data.xlsx', index=False)
+print('Created test_data.xlsx')
+
+# 创建简单的 PDF（用 reportlab）
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import letter
+
+c = canvas.Canvas("test.pdf", pagesize=letter)
+c.drawString(100, 750, "Test PDF Document")
+c.drawString(100, 700, "This is a test page.")
+c.save()
+print('Created test.pdf')
+"@ | python
+
+      - name: Test executable (basic)
+        shell: cmd
+        run: |
+          echo Testing executable launch...
+          cd dist\PDFWatermark
+          start /wait /b PDFWatermark.exe
+          timeout /t 3
+          echo Basic launch test completed
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: PDFWatermark-Windows
           path: dist/PDFWatermark/**
+          retention-days: 7
+
+      - name: Create Release ZIP
+        shell: powershell
+        run: |
+          Compress-Archive -Path "dist/PDFWatermark/*" -DestinationPath "PDFWatermark-Windows.zip"
+          Write-Host "Created PDFWatermark-Windows.zip"
+
+      - name: Upload Release ZIP
+        uses: actions/upload-artifact@v4
+        with:
+          name: PDFWatermark-Windows-ZIP
+          path: PDFWatermark-Windows.zip
+          retention-days: 7
