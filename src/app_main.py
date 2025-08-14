@@ -8,8 +8,6 @@ import tempfile
 from pathlib import Path
 import sys
 from pdf2image import convert_from_path
-...
-# removed erroneous stray call: convert_from_path(pdf_path, poppler_path=POPLER_DIR)
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import letter, A4
 from reportlab.lib.colors import Color
@@ -29,35 +27,44 @@ from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.application import MIMEApplication
 import time
-# ---- 放在文件顶部靠前位置（import 之后也可，但要在使用 pdf2image 前）
+
+# ---- 设置 Poppler 路径 ----
 import os, sys
 
 def ensure_poppler_path():
     """
     在常见位置查找 pdftoppm.exe，并把该目录加入 PATH。
-    返回找到的目录；找不到返回 None。
     """
-    base_dir = getattr(sys, "_MEIPASS", None)  # PyInstaller 运行时临时目录
-    candidates = []
-
-    # 运行目录（dist\MyApp\ 下）
-    candidates.append(os.getcwd())
-    # PyInstaller 解包目录
-    if base_dir:
-        candidates.append(base_dir)
-    # 常见 sidecar 子目录
-    candidates.append(os.path.join(os.getcwd(), "poppler"))
-    # Chocolatey 默认安装路径（CI/本机）
-    candidates.append(r"C:\ProgramData\chocolatey\lib\poppler\tools")
-
+    if getattr(sys, 'frozen', False):
+        # PyInstaller 打包后
+        base_dir = sys._MEIPASS
+        app_dir = os.path.dirname(sys.executable)
+    else:
+        # 开发环境
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        app_dir = base_dir
+    
+    candidates = [
+        app_dir,  # exe所在目录
+        os.path.join(app_dir, "poppler"),
+        base_dir,
+        r"C:\ProgramData\chocolatey\lib\poppler\tools"
+    ]
+    
     for c in candidates:
-        exe = os.path.join(c, "pdftoppm.exe")
-        if os.path.exists(exe):
-            os.environ["PATH"] = c + os.pathsep + os.environ.get("PATH", "")
-            return c
+        if os.path.exists(c):
+            pdftoppm = os.path.join(c, "pdftoppm.exe")
+            if os.path.exists(pdftoppm):
+                print(f"Found Poppler at: {c}")
+                os.environ["PATH"] = c + os.pathsep + os.environ.get("PATH", "")
+                return c
+    
+    print("Warning: Poppler tools not found!")
     return None
 
-POPLER_DIR = ensure_poppler_path()
+POPPLER_DIR = ensure_poppler_path()
+
+# 后续的 ModernGlassUI 和 PDFWatermarkTool 类定义...
 
 class ModernGlassUI:
     """现代化磨砂玻璃UI样式管理器"""
